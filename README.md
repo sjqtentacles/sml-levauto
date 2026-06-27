@@ -2,49 +2,63 @@
 
 [![CI](https://github.com/sjqtentacles/sml-levauto/actions/workflows/ci.yml/badge.svg)](https://github.com/sjqtentacles/sml-levauto/actions/workflows/ci.yml)
 
-Levenshtein edit distance and dictionary fuzzy search for Standard ML.
-Provides O(mn) DP edit distance and a linear dictionary scan for finding
-all words within a given edit distance of a query.
+Levenshtein / Damerau-Levenshtein edit distance and dictionary fuzzy search for
+Standard ML. Provides O(mn) DP edit distance, a bounded early-abandoning
+variant, a restricted Damerau distance (adjacent transpositions), normalized
+similarity, and dictionary search that can rank results by distance.
 
 ## API sketch
 
 ```sml
 (* Edit distance between two strings *)
 LevAuto.editDist "kitten" "sitting"    (* 3 *)
-LevAuto.editDist "abc"    "abc"        (* 0 *)
 LevAuto.editDist ""       "abc"        (* 3 *)
+
+(* Damerau-Levenshtein counts an adjacent swap as one edit *)
+LevAuto.damerau "ab" "ba"              (* 1  (editDist would be 2) *)
+
+(* Bounded distance: exact when <= k, else k+1 (cheap for small k) *)
+LevAuto.editDistUpTo 1 "cat" "dog"     (* 2  (capped: distance is 3) *)
 
 (* Is the edit distance within a threshold? *)
 LevAuto.within "cat" "car" 1           (* true  — 1 substitution *)
-LevAuto.within "cat" "dog" 1           (* false — distance = 3 *)
+
+(* Normalized similarity in [0,1] *)
+LevAuto.similarity "cat" "bat"         (* 0.6667 *)
 
 (* Search a dictionary for all words within edit distance k of a query *)
-val dict = ["cat", "car", "bat", "hat", "dog", "cats", "cast" (* ... *) ]
-val hits : string list = LevAuto.search dict "cat" 1
-(* ["cat", "car", "bat", "hat", "cats", "cast"] *)
+val dict = ["cat", "car", "bat", "hat", "dog"]
+LevAuto.search dict "cat" 1            (* ["cat","car","bat","hat"] (input order) *)
 
-(* Larger k for spelling correction *)
-val hits2 : string list = LevAuto.search dict "recieve" 2
+(* Ranked by distance (stable), or just the single closest word *)
+LevAuto.searchRanked dict "cat" 1      (* [("cat",0),("car",1),("bat",1),("hat",1)] *)
+LevAuto.nearest dict "caz"             (* SOME ("cat", 1) *)
 ```
 
 ## API
 
 ```sml
-val editDist : string -> string -> int
-val within   : string -> string -> int -> bool
-val search   : string list -> string -> int -> string list
+val editDist     : string -> string -> int
+val damerau      : string -> string -> int
+val editDistUpTo : int -> string -> string -> int
+val within       : string -> string -> int -> bool
+val similarity   : string -> string -> real
+val search       : string list -> string -> int -> string list
+val searchRanked : string list -> string -> int -> (string * int) list
+val nearest      : string list -> string -> (string * int) option
 ```
 
 ## Known limitations
 
-- **Linear scan**: `search` iterates the entire dictionary computing `editDist`
-  for each word — O(|dict| × |query| × |word|). For large dictionaries
-  (> 100 k words), use a BK-tree or precomputed index.
-- **Levenshtein only**: does not implement Damerau–Levenshtein (transpositions).
-  Use `sml-editdist` for `damerau` or `jaroWinkler`.
-- **No automaton**: true Levenshtein automata (NFA states keyed on (position,
-  error count)) are not implemented; each `search` call recomputes the full
-  DP table per word.
+- **Linear scan**: `search`/`searchRanked` iterate the entire dictionary. The
+  per-word cost is reduced by `editDistUpTo` (early abandonment for small `k`),
+  but for very large dictionaries a BK-tree or precomputed index is still
+  preferable.
+- **Restricted Damerau (OSA)**: `damerau` is optimal-string-alignment distance
+  (no substring edited twice); it is not the unrestricted Damerau-Levenshtein
+  distance. See `sml-editdist` for `jaroWinkler` and friends.
+- **No automaton**: true Levenshtein automata are not implemented; `editDistUpTo`
+  uses a banded/abandoning DP rather than an NFA.
 - Operates on byte characters; multi-byte UTF-8 sequences count as multiple
   characters.
 
@@ -77,10 +91,10 @@ sml.pkg
 Makefile
 lib/github.com/sjqtentacles/sml-levauto/
   levauto.sig     LEVAUTO signature
-  levauto.sml     O(mn) DP editDist + search
+  levauto.sml     DP editDist/damerau, bounded editDistUpTo, ranked search
   levauto.mlb
 test/
-  test.sml        editDist pairs, within, dictionary search tests
+  test.sml        editDist, damerau, bounded distance, similarity, ranked search
 ```
 
 ## License
