@@ -48,6 +48,38 @@ val searchRanked : string list -> string -> int -> (string * int) list
 val nearest      : string list -> string -> (string * int) option
 ```
 
+## Example
+
+`make example` builds and runs [`examples/demo.sml`](examples/demo.sml), which
+walks through edit distance, Damerau transpositions, bounded distance,
+normalized similarity, and fuzzy dictionary search/ranking/nearest-match
+(output is byte-identical under MLton and Poly/ML):
+
+```
+Edit distance:
+  editDist "kitten" "sitting" = 3
+  damerau  "ab" "ba"          = 1  (vs plain editDist = 2)
+  editDistUpTo 1 "cat" "dog"  = 2  (capped at k+1)
+
+Within a distance threshold:
+  within "cat" "bat" 1 = true
+  within "cat" "dog" 1 = false
+
+Normalized similarity:
+  similarity "cat" "cat" = 1.0000
+  similarity "cat" "bat" = 0.6667
+  similarity "abc" "xyz" = 0.0000
+
+Fuzzy dictionary search, dict = [cat,bat,rat,car,bar,dog,log,fog,hat,mat], query "cat", k=2:
+  search      -> [cat,bat,rat,car,bar,hat,mat]
+  searchRanked (word:dist), sorted:
+    cat:0, bat:1, rat:1, car:1, hat:1, mat:1, bar:2
+
+Nearest match:
+  nearest "kat" -> cat (distance 1)
+  nearest "cat" in [] -> none
+```
+
 ## Known limitations
 
 - **Linear scan**: `search`/`searchRanked` iterate the entire dictionary. The
@@ -81,6 +113,7 @@ lib/github.com/sjqtentacles/sml-levauto/levauto.mlb
 make test        # MLton
 make test-poly   # Poly/ML
 make all-tests   # both
+make example     # build + run the demo
 make clean
 ```
 
